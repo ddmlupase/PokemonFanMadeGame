@@ -6,10 +6,6 @@ import { useNavigate } from 'react-router-dom';
 function App() {
   const navigate = useNavigate();
 
-  const handlePlay = () => {
-    navigate('/select');
-  };
-
   return (
     <div
       className="App pixel-bg"

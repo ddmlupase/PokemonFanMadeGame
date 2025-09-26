@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { useLocation, useNavigate } from 'react-router-dom';
 import { pokemonData } from '../data/pokemondata.js';
 import backgroundImg from '../assets/images/fightbg.png';
@@ -39,10 +39,10 @@ const DamageNumber = ({ damage, isVisible, isCrit, position }) => {
 const useScreenShake = () => {
   const [isShaking, setIsShaking] = useState(false);
   
-  const shake = () => {
+  const shake = useCallback(() => {
     setIsShaking(true);
     setTimeout(() => setIsShaking(false), 500);
-  };
+  }, []);
   
   return [isShaking, shake];
 };
@@ -88,41 +88,15 @@ function Game() {
   );
 
   // Sound effects (mock functions - replace with actual audio)
-  const playSound = (soundName) => {
+  const playSound = useCallback((soundName) => {
     console.log(`Playing sound: ${soundName}`);
     // You can replace this with actual audio implementation
     // const audio = new Audio(`/sounds/${soundName}.mp3`);
     // audio.play().catch(e => console.log('Audio play failed:', e));
-  };
-
-  // Turn timer effect
-  useEffect(() => {
-    if (winner || turn === 'ai') return;
-    
-    const timer = setInterval(() => {
-      setTurnTimer(prev => {
-        if (prev <= 1) {
-          // Auto-select random available attack if time runs out
-          if (turn === 'player') {
-            const availableAttacks = playerAttackUses
-              .map((uses, idx) => uses > 0 ? idx : null)
-              .filter(idx => idx !== null);
-            if (availableAttacks.length > 0) {
-              const randomAttack = availableAttacks[Math.floor(Math.random() * availableAttacks.length)];
-              handleAttack(randomAttack);
-            }
-          }
-          return 30;
-        }
-        return prev - 1;
-      });
-    }, 1000);
-
-    return () => clearInterval(timer);
-  }, [turn, winner, playerAttackUses]);
+  }, []);
 
   // Enhanced battle text display
-  const displayBattleText = (text, type = 'normal', duration = 2000) => {
+  const displayBattleText = useCallback((text, type = 'normal', duration = 2000) => {
     setBattleText(text);
     setBattleTextType(type);
     setShowBattleText(true);
@@ -131,10 +105,10 @@ function Game() {
     setTimeout(() => {
       setShowBattleText(false);
     }, duration);
-  };
+  }, [playSound]);
 
   // Enhanced damage display
-  const displayDamage = (damage, isCrit, targetElement) => {
+  const displayDamage = useCallback((damage, isCrit, targetElement) => {
     const rect = targetElement?.getBoundingClientRect();
     const containerRect = gameContainerRef.current?.getBoundingClientRect();
     
@@ -153,10 +127,10 @@ function Game() {
         setShowDamage(prev => ({ ...prev, show: false }));
       }, 1500);
     }
-  };
+  }, []);
 
   // Status effect application
-  const applyStatusEffect = (target, effect, duration = 3) => {
+  const applyStatusEffect = useCallback((target, effect, duration = 3) => {
     const setter = target === 'player' ? setPlayerStatus : setOpponentStatus;
     setter({ type: effect, duration });
     
@@ -164,10 +138,10 @@ function Game() {
       `${target === 'player' ? playerPokemon.name : opponentPokemon.name} is ${effect}!`,
       'status'
     );
-  };
+  }, [displayBattleText, playerPokemon.name, opponentPokemon.name]);
 
   // Enhanced attack execution with animations
-  const executeAttack = async (
+  const executeAttack = useCallback(async (
     attacker,
     defender,
     attack,
@@ -284,10 +258,18 @@ function Game() {
     }, 1000);
 
     setTurnTimer(30); // Reset turn timer
-  };
+  }, [
+    playSound, 
+    displayBattleText, 
+    applyStatusEffect, 
+    comboCount, 
+    weatherEffect, 
+    shake, 
+    displayDamage
+  ]);
 
   // Enhanced player attack with visual feedback
-  const handleAttack = async (attackIdx) => {
+  const handleAttack = useCallback(async (attackIdx) => {
     if (winner || playerAttackUses[attackIdx] === 0 || turn !== 'player') return;
 
     const attack = playerPokemon.attacks[attackIdx];
@@ -318,10 +300,18 @@ function Game() {
       setTurn(mode === 'computer' ? 'ai' : 'opponent');
       setIsPlayerTurn(false);
     }, 2000);
-  };
+  }, [
+    winner,
+    playerAttackUses,
+    turn,
+    playerPokemon.attacks,
+    mode,
+    executeAttack,
+    displayBattleText
+  ]);
 
   // Manual opponent attack for 1v1 mode
-  const handleOpponentAttack = async (attackIdx) => {
+  const handleOpponentAttack = useCallback(async (attackIdx) => {
     if (winner || mode !== '1v1' || turn !== 'opponent' || opponentAttackUses[attackIdx] === 0) return;
 
     const attack = opponentPokemon.attacks[attackIdx];
@@ -353,7 +343,41 @@ function Game() {
       setIsPlayerTurn(true);
       setTurnTimer(30);
     }, 2000);
-  };
+  }, [
+    winner,
+    mode,
+    turn,
+    opponentAttackUses,
+    opponentPokemon.attacks,
+    executeAttack,
+    displayBattleText
+  ]);
+
+  // Turn timer effect
+  useEffect(() => {
+    if (winner || turn === 'ai') return;
+    
+    const timer = setInterval(() => {
+      setTurnTimer(prev => {
+        if (prev <= 1) {
+          // Auto-select random available attack if time runs out
+          if (turn === 'player') {
+            const availableAttacks = playerAttackUses
+              .map((uses, idx) => uses > 0 ? idx : null)
+              .filter(idx => idx !== null);
+            if (availableAttacks.length > 0) {
+              const randomAttack = availableAttacks[Math.floor(Math.random() * availableAttacks.length)];
+              handleAttack(randomAttack);
+            }
+          }
+          return 30;
+        }
+        return prev - 1;
+      });
+    }, 1000);
+
+    return () => clearInterval(timer);
+  }, [turn, winner, playerAttackUses, handleAttack]);
 
   // Enhanced AI with more personality
   useEffect(() => {
@@ -361,7 +385,7 @@ function Game() {
 
     const aiDelay = Math.random() * 2000 + 1000; // Random thinking time
 
-    setTimeout(async () => {
+    const aiTurn = setTimeout(async () => {
       let available = opponentAttackUses
         .map((uses, idx) => (uses > 0 ? idx : null))
         .filter(idx => idx !== null);
@@ -415,7 +439,18 @@ function Game() {
         setTurnTimer(30);
       }, 2000);
     }, aiDelay);
-  }, [turn, mode, winner, opponentHP, opponentAttackUses, playerHP]);
+
+    return () => clearTimeout(aiTurn);
+  }, [
+    turn, 
+    mode, 
+    winner, 
+    opponentHP, 
+    opponentAttackUses, 
+    playerHP, 
+    opponentPokemon.attacks, 
+    executeAttack
+  ]);
 
   // Status effects processing
   useEffect(() => {
@@ -436,9 +471,9 @@ function Game() {
     } else {
       setOpponentStatus(null);
     }
-  }, [turn]);
+  }, [turn, playerStatus, opponentStatus, playerPokemon.name, opponentPokemon.name, displayBattleText]);
 
-  const handlePlayAgain = () => {
+  const handlePlayAgain = useCallback(() => {
     // Reset all state
     setPlayerHP(initialHP);
     setOpponentHP(initialHP);
@@ -458,11 +493,11 @@ function Game() {
     setWeatherEffect(null);
     setTurnTimer(30);
     setIsPlayerTurn(true);
-  };
+  }, [playerPokemon.attacks, opponentPokemon.attacks]);
 
-  const handleBackHome = () => {
+  const handleBackHome = useCallback(() => {
     navigate('/');
-  };
+  }, [navigate]);
 
   const playerHPPercentage = (playerHP / initialHP) * 100;
   const opponentHPPercentage = (opponentHP / initialHP) * 100;
